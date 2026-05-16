@@ -1,5 +1,7 @@
 package com.registraduria.scrutiny_service.command.controller;
 
+import java.util.concurrent.CompletableFuture;
+
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,7 +43,7 @@ public class E14CommandController {
     }
 
     @PatchMapping("/{id}/publish")
-    public E14Record publish(
+    public CompletableFuture<E14Record> publish(
             @PathVariable Long id
     ) {
         return service.publish(id);

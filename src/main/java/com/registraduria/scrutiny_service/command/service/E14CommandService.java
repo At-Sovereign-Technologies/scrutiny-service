@@ -1,7 +1,9 @@
 package com.registraduria.scrutiny_service.command.service;
 
 import java.time.LocalDateTime;
+import java.util.concurrent.CompletableFuture;
 
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import com.registraduria.scrutiny_service.command.dto.CreateE14Request;
@@ -50,19 +52,34 @@ public class E14CommandService {
         return repository.save(record);
     }
 
-    public E14Record publish(Long id) {
+    @Async
+    public CompletableFuture<E14Record> publish(
+            Long id
+    ) {
 
         E14Record record = repository.findById(id)
                 .orElseThrow();
 
         if (record.getStatus() != E14Status.SIGNED) {
+
             throw new RuntimeException(
                     "Only signed records can be published."
             );
         }
 
+        try {
+
+            Thread.sleep(3000);
+
+        } catch (InterruptedException e) {
+
+            Thread.currentThread().interrupt();
+        }
+
         record.setStatus(E14Status.PUBLISHED);
 
-        return repository.save(record);
+        repository.save(record);
+
+        return CompletableFuture.completedFuture(record);
     }
 }

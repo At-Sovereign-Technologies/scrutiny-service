@@ -11,6 +11,7 @@ import com.registraduria.scrutiny_service.command.dto.SignE14Request;
 import com.registraduria.scrutiny_service.command.repository.E14CommandRepository;
 import com.registraduria.scrutiny_service.domain.entity.E14Record;
 import com.registraduria.scrutiny_service.domain.enums.E14Status;
+import com.registraduria.scrutiny_service.infrastructure.grpc.DisputeGrpcClient;
 
 import lombok.RequiredArgsConstructor;
 
@@ -19,6 +20,8 @@ import lombok.RequiredArgsConstructor;
 public class E14CommandService {
 
     private final E14CommandRepository repository;
+
+    private final DisputeGrpcClient disputeGrpcClient;
 
     public E14Record create(CreateE14Request request) {
 
@@ -64,6 +67,20 @@ public class E14CommandService {
 
             throw new RuntimeException(
                     "Only signed records can be published."
+            );
+        }
+
+        boolean quarantined =
+                disputeGrpcClient
+                        .getQuarantinedMesaCodes()
+                        .contains(
+                                record.getMesaCode()
+                        );
+
+        if (quarantined) {
+
+            throw new RuntimeException(
+                    "Mesa is quarantined by dispute-service."
             );
         }
 

@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package disputes;
+
+option java_multiple_files = true;
+
+option java_package =
+        "com.registraduria.scrutinyservice.grpc";
+
+service DisputeGrpcService {
+
+  rpc GetQuarantinedMesaCodes (
+      EmptyRequest
+  ) returns (
+      QuarantinedMesaList
+  );
+}
+
+message EmptyRequest {}
+
+message QuarantinedMesa {
+
+  string mesaCode = 1;
+}
+
+message QuarantinedMesaList {
+
+  repeated QuarantinedMesa mesas = 1;
+}

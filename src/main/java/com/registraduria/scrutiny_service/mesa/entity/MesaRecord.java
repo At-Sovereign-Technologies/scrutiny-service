@@ -46,4 +46,8 @@ public class MesaRecord {
 
     @Enumerated(EnumType.STRING)
     private MesaStatus status;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean quarantined = false;
 }

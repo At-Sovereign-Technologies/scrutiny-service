@@ -1,75 +1,299 @@
 # Scrutiny Service
 
-## Descripción
+## Descripción General
 
-Scrutiny Service es un microservicio encargado de gestionar actas electorales E14 dentro del proceso de escrutinio.
+Scrutiny Service es un microservicio desarrollado con Spring Boot encargado del proceso de escrutinio y consolidación electoral.
 
-El servicio administra la creación, firma digital y publicación oficial de registros electorales.
+El servicio implementa:
 
-Además, valida cuarentenas institucionales mediante gRPC y consume eventos distribuidos mediante Kafka.
-
----
-
-# Responsabilidades
-
-* Crear registros E14
-* Gestionar estado de actas electorales
-* Aplicar firma digital
-* Publicar resultados oficiales
-* Bloquear publicación si existe cuarentena institucional
-* Consumir eventos Kafka
-* Integrarse con Dispute Service mediante gRPC
+* Gestión de mesas electorales
+* Generación nativa del Acta E14
+* Generación de PDF y hash SHA-256
+* Validación de doble verdad VVPAT
+* Cuarentena automática de mesas
+* Aprobación de escrutinio ascendente
+* Comunicación distribuida mediante Kafka
+* Comunicación gRPC con dispute-service
+* Persistencia en PostgreSQL
+* Migraciones con Flyway
 
 ---
 
 # Arquitectura
 
-El microservicio implementa:
-
-* Microservicios
-* CQRS
-* Event-Driven Architecture
-* gRPC Client
-* REST API
-* PostgreSQL
-* Flyway
-* Kafka Consumer
-
----
-
-# Tecnologías
+## Tecnologías utilizadas
 
 * Java 21
 * Spring Boot 3
 * Spring Data JPA
 * PostgreSQL
 * Flyway
-* Spring Kafka
+* Apache Kafka
 * gRPC
-* Maven
+* OpenPDF
 * Docker
 * Swagger OpenAPI
 
 ---
 
-# Estructura del Proyecto
+# Funcionalidades Principales
 
-```text
-src/main/java
-├── command
-├── query
-├── domain
-├── infrastructure
-├── events
-├── grpc
-└── config
+## Gestión de Mesas
+
+El sistema permite:
+
+* Crear mesas
+* Cerrar mesas
+* Consolidar votos
+* Generar registros E14
+* Generar PDFs nativos
+* Generar hashes SHA-256
+
+---
+
+## Flujo E14
+
+Cuando una mesa es cerrada:
+
+1. Se consolidan los votos
+2. Se genera un PDF E14 nativo
+3. Se genera un hash SHA-256 del PDF
+4. Se almacena un registro E14 en PostgreSQL
+5. El E14 queda en estado DRAFT
+
+Los PDFs generados se almacenan en:
+
+```txt
+/generated-pdfs
+```
+
+---
+
+## Validación de Doble Verdad VVPAT
+
+El sistema valida el conteo físico contra el conteo digital.
+
+### Flujo
+
+1. El jurado registra el conteo físico
+2. El sistema compara votos físicos vs digitales
+3. Se genera MATCH o MISMATCH
+4. Se publica un evento Kafka en caso de discrepancia
+5. Después de 3 discrepancias la mesa entra automáticamente en cuarentena
+
+### Topic Kafka
+
+```txt
+vvpat.mismatch
+```
+
+---
+
+## Cuarentena Automática
+
+Las mesas son marcadas automáticamente en cuarentena después de múltiples discrepancias.
+
+Condiciones:
+
+* 3 intentos fallidos
+* Los votos físicos no coinciden con los digitales
+
+Resultado:
+
+```txt
+quarantined = true
+```
+
+registrado dentro de la mesa.
+
+---
+
+## Aprobación de Escrutinio Ascendente
+
+El sistema soporta aprobación ascendente:
+
+```txt
+MUNICIPAL
+DEPARTAMENTAL
+NACIONAL
+```
+
+Los delegados pueden:
+
+* Aprobar escrutinio
+* Solicitar recuento
+* Registrar alertas
+* Generar hashes de integridad
+
+### Topic Kafka
+
+```txt
+scrutiny.approved
+```
+
+Cuando se aprueba el nivel NACIONAL:
+
+```txt
+E26 ENABLED
+```
+
+es emitido dentro del flujo.
+
+---
+
+# Comunicación entre Microservicios
+
+## gRPC
+
+El servicio se comunica con dispute-service mediante gRPC.
+
+Objetivos:
+
+* Consultar mesas en cuarentena
+* Validar disputas antes de publicación
+
+---
+
+# Eventos Kafka
+
+## Eventos Producidos
+
+### Discrepancia VVPAT
+
+Topic:
+
+```txt
+vvpat.mismatch
+```
+
+Payload de ejemplo:
+
+```json
+{
+  "mesaCode": "MESA-999",
+  "digitalVotes": 400,
+  "physicalVotes": 390,
+  "attempt": 2
+}
+```
+
+---
+
+### Escrutinio aprobado
+
+Topic:
+
+```txt
+scrutiny.approved
+```
+
+Payload de ejemplo:
+
+```json
+{
+  "level": "NATIONAL",
+  "delegateName": "Carlos Mendoza",
+  "scrutinyHash": "abc123..."
+}
+```
+
+---
+
+# Endpoints REST
+
+## Mesas
+
+### Crear mesa
+
+```http
+POST /api/v1/mesas
+```
+
+Request:
+
+```json
+{
+  "mesaCode": "MESA-999"
+}
+```
+
+---
+
+### Cerrar mesa
+
+```http
+PATCH /api/v1/mesas/{id}/close
+```
+
+Request:
+
+```json
+{
+  "validVotes": 400,
+  "blankVotes": 10,
+  "nullVotes": 2,
+  "unmarkedVotes": 1
+}
+```
+
+---
+
+## VVPAT
+
+### Escaneo VVPAT
+
+```http
+POST /api/v1/vvpat/scan
+```
+
+Request:
+
+```json
+{
+  "mesaCode": "MESA-999",
+  "juradoId": "JURADO-1",
+  "physicalVotes": 390
+}
+```
+
+---
+
+## Escrutinio Ascendente
+
+### Aprobar escrutinio
+
+```http
+POST /api/v1/scrutiny/approve
+```
+
+Request:
+
+```json
+{
+  "level": "NATIONAL",
+  "decision": "APPROVED",
+  "delegateName": "Carlos Mendoza",
+  "alerts": "No active alerts"
+}
+```
+
+---
+
+# Migraciones de Base de Datos
+
+Administradas mediante Flyway.
+
+Ubicación:
+
+```txt
+src/main/resources/db/migration
 ```
 
 ---
 
 # Variables de Entorno
 
-Archivo `.env`:
+Ejemplo `.env`:
 
 ```env
 SERVER_PORT=8081
@@ -80,23 +304,17 @@ POSTGRES_PASSWORD=postgres
 POSTGRES_PORT=5432
 ```
 
----
+Cargar variables:
 
-# Dependencias Externas
-
-El servicio requiere:
-
-* PostgreSQL
-* Kafka
-* Dispute Service
+```bash
+export $(grep -v '^#' .env | xargs)
+```
 
 ---
 
-# Configuración Kafka
+# Ejecución del Servicio
 
-Kafka se ejecuta desde la carpeta compartida `infrastructure`.
-
-## Levantar Kafka
+## Levantar infraestructura
 
 ```bash
 docker compose up -d
@@ -104,23 +322,7 @@ docker compose up -d
 
 ---
 
-# Base de Datos
-
-PostgreSQL es utilizado como base de datos principal.
-
-Las migraciones son administradas con Flyway.
-
----
-
-# Ejecutar el Proyecto
-
-## 1. Exportar variables
-
-```bash
-export $(grep -v '^#' .env | xargs)
-```
-
-## 2. Ejecutar servicio
+## Ejecutar servicio
 
 ```bash
 ./mvnw spring-boot:run
@@ -130,129 +332,81 @@ export $(grep -v '^#' .env | xargs)
 
 # Swagger
 
-```text
+Disponible en:
+
+```txt
 http://localhost:8081/swagger-ui
 ```
 
 ---
 
-# REST Endpoints
+# Kafka UI
 
-## Crear E14
+Disponible en:
 
-```http
-POST /api/v1/e14
-```
-
-Body:
-
-```json
-{
-  "mesaCode": "MESA-001",
-  "municipality": "Bogota",
-  "pdfHash": "HASH_TEST"
-}
+```txt
+http://localhost:8085
 ```
 
 ---
 
-## Firmar E14
+# Arquitectura CQRS y Event-Driven
 
-```http
-PATCH /api/v1/e14/{id}/sign
-```
+El servicio implementa patrones CQRS y Event-Driven.
 
-Body:
+## CQRS
 
-```json
-{
-  "digitalSignature": "SIGN_TEST"
-}
+* Los comandos gestionan escritura y ejecución de flujos
+* Las consultas gestionan lectura y reportes
+
+## Event-Driven
+
+Kafka se utiliza para:
+
+* Propagación de discrepancias VVPAT
+* Propagación de aprobaciones de escrutinio
+* Auditoría distribuida
+
+---
+
+# Estructura del Proyecto
+
+```txt
+src/main/java/com/registraduria/scrutiny_service
+│
+├── command
+├── query
+├── mesa
+├── vvpat
+├── scrutiny
+├── events
+├── grpc
+├── pdf
+└── domain
 ```
 
 ---
 
-## Publicar E14
+# Historias de Usuario Implementadas
 
-```http
-PATCH /api/v1/e14/{id}/publish
-```
+## US-SR-M4-01
 
-La publicación será bloqueada si la mesa se encuentra en cuarentena institucional.
+* Cierre de mesa
+* Generación nativa E14
+* Generación PDF
+* Hash SHA-256
 
----
+## US-SR-M4-02
 
-# gRPC
+* Validación doble verdad VVPAT
+* Eventos Kafka de discrepancia
+* Cuarentena automática
 
-El servicio consume comunicación gRPC desde Dispute Service.
+## US-SR-M4-05
 
-## Servicio consumido
-
-```text
-GetQuarantinedMesaCodes
-```
-
-## Puerto utilizado
-
-```text
-9090
-```
+* Escrutinio ascendente
+* Flujo de aprobación nacional
+* Eventos Kafka de aprobación
+* Activación de E26
 
 ---
-
-# Kafka
-
-## Topic consumido
-
-```text
-dispute.created
-```
-
-## Evento consumido
-
-```json
-{
-  "id": 1,
-  "mesaCode": "MESA-001",
-  "witnessName": "Carlos Perez",
-  "reason": "Conteo inconsistente",
-  "createdAt": "2026-05-16T17:00:00"
-}
-```
-
----
-
-# Flujo General
-
-1. Se crea un E14
-2. El registro queda en estado DRAFT
-3. El E14 es firmado digitalmente
-4. Antes de publicar, el servicio consulta cuarentenas mediante gRPC
-5. Si existe bloqueo institucional, la publicación es rechazada
-6. Si la disputa fue resuelta, el E14 puede publicarse
-7. El servicio consume eventos distribuidos desde Kafka
-
----
-
-# Estados del E14
-
-```text
-DRAFT
-SIGNED
-PUBLISHED
-```
-
----
-
-# Estado Actual
-
-Implementación funcional con:
-
-* CQRS
-* gRPC Client
-* Kafka Consumer
-* PostgreSQL
-* Flyway
-* Swagger
-* Comunicación distribuida
-* Validación institucional

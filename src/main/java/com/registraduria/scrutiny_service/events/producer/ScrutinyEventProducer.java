@@ -1,5 +1,6 @@
 package com.registraduria.scrutiny_service.events.producer;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
@@ -11,16 +12,18 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class ScrutinyEventProducer {
 
-    private final KafkaTemplate<String, Object>
-            kafkaTemplate;
+    private final ObjectProvider<KafkaTemplate<String, Object>>
+            kafkaTemplateProvider;
 
     public void publishApproved(
             ScrutinyApprovedEvent event
     ) {
 
-        kafkaTemplate.send(
-                "scrutiny.approved",
-                event
+        kafkaTemplateProvider.ifAvailable(
+                kafkaTemplate -> kafkaTemplate.send(
+                        "scrutiny.approved",
+                        event
+                )
         );
     }
 }

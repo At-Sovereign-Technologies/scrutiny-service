@@ -44,5 +44,5 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Run Maven Test Suite (Exclude Kafka and ignore local DB verification issues)
-        run: mvn clean test -Dspring.autoconfigure.exclude=org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration -Dspring.jpa.hibernate.ddl-auto=update
+      - name: Run Maven Test Suite
+        run: mvn clean test

@@ -2,6 +2,9 @@ package com.registraduria.scrutiny_service.official.controller;
 
 import java.util.Map;
 
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -12,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.registraduria.scrutiny_service.official.dto.ActaE26Response;
 import com.registraduria.scrutiny_service.official.exception.ActaImmutableException;
+import com.registraduria.scrutiny_service.official.service.ActaDownload;
 import com.registraduria.scrutiny_service.official.service.ActaQueryService;
 
 import lombok.RequiredArgsConstructor;
@@ -43,6 +47,28 @@ public class ActaE26Controller {
                 "actaId", id,
                 "hashVerified", service.verifyIntegrity(id)
         );
+    }
+
+    /** Descarga el PDF/A-3 archivistico del acta (se muestra inline en el navegador). */
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> pdf(@PathVariable Long id) {
+        ActaDownload file = service.downloadPdf(id);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "inline; filename=\"" + file.fileName() + "\"")
+                .body(file.data());
+    }
+
+    /** Descarga el XML firmado (XML-DSig) del acta para interoperabilidad. */
+    @GetMapping("/{id}/xml")
+    public ResponseEntity<byte[]> xml(@PathVariable Long id) {
+        ActaDownload file = service.downloadXml(id);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_XML)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + file.fileName() + "\"")
+                .body(file.data());
     }
 
     // ---- Mutaciones prohibidas: el acta es inmutable (CA-3) -> 403 -----------

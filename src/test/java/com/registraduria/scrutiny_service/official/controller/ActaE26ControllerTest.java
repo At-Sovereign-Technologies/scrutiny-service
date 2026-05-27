@@ -1,12 +1,13 @@
 package com.registraduria.scrutiny_service.official.controller;
 
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -17,11 +18,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.registraduria.scrutiny_service.official.dto.ActaE26Response;
 import com.registraduria.scrutiny_service.official.dto.E26ActaContent;
 import com.registraduria.scrutiny_service.official.enums.ActaStatus;
+import com.registraduria.scrutiny_service.official.service.ActaDownload;
 import com.registraduria.scrutiny_service.official.service.ActaQueryService;
 
 /**
@@ -56,6 +59,30 @@ class ActaE26ControllerTest {
                 .andExpect(jsonPath("$.actaNumber").value("E26-000001"))
                 .andExpect(jsonPath("$.status").value("OFICIAL_INMUTABLE"))
                 .andExpect(jsonPath("$.hashVerified").value(true));
+    }
+
+    @Test
+    void pdf_is_served_as_application_pdf() throws Exception {
+        when(service.downloadPdf(1L))
+                .thenReturn(new ActaDownload("E26-000001.pdf", new byte[]{1, 2, 3}));
+
+        mockMvc.perform(get("/api/v1/actas/1/pdf"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andExpect(header().string("Content-Disposition",
+                        "inline; filename=\"E26-000001.pdf\""));
+    }
+
+    @Test
+    void xml_is_served_as_application_xml_attachment() throws Exception {
+        when(service.downloadXml(1L))
+                .thenReturn(new ActaDownload("E26-000001.xml", "<x/>".getBytes()));
+
+        mockMvc.perform(get("/api/v1/actas/1/xml"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_XML))
+                .andExpect(header().string("Content-Disposition",
+                        "attachment; filename=\"E26-000001.xml\""));
     }
 
     @Test

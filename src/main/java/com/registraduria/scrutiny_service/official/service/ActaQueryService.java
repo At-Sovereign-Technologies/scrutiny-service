@@ -1,5 +1,9 @@
 package com.registraduria.scrutiny_service.official.service;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +52,44 @@ public class ActaQueryService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Acta no encontrada: " + id));
         return integrityService.verify(acta);
+    }
+
+    /** Descarga el PDF/A-3 del acta; reverifica integridad antes de servir (CA-3). */
+    @Transactional(readOnly = true)
+    public ActaDownload downloadPdf(Long id) {
+        return readFile(loadVerified(id).getPdfPath());
+    }
+
+    /** Descarga el XML firmado del acta; reverifica integridad antes de servir (CA-3). */
+    @Transactional(readOnly = true)
+    public ActaDownload downloadXml(Long id) {
+        return readFile(loadVerified(id).getXmlPath());
+    }
+
+    private ActaE26 loadVerified(Long id) {
+        ActaE26 acta = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Acta no encontrada: " + id));
+        integrityService.verifyOrThrow(acta);
+        return acta;
+    }
+
+    private ActaDownload readFile(String storedPath) {
+        // La ruta proviene de la BD (la escribio el propio servicio al generar el
+        // acta), no de entrada del usuario, por lo que no hay riesgo de traversal.
+        Path path = Path.of(storedPath);
+        if (!Files.exists(path) || !Files.isReadable(path)) {
+            throw new ResourceNotFoundException(
+                    "Archivo del acta no disponible: " + path.getFileName());
+        }
+        try {
+            return new ActaDownload(
+                    path.getFileName().toString(),
+                    Files.readAllBytes(path));
+        } catch (IOException e) {
+            throw new IllegalStateException(
+                    "Error leyendo el archivo del acta.", e);
+        }
     }
 
     private ActaE26Response toResponse(ActaE26 acta, boolean hashVerified) {

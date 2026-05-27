@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -118,11 +119,23 @@ class OfficialResultsFlowIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.content.electedCandidates.length()").value(3))
                 .andExpect(jsonPath("$.content.magistrateSignatures.length()").value(2));
 
-        // 5) Inmutabilidad: cualquier intento de borrado -> 403.
+        // 5) Documentos: PDF/A-3 y XML firmado descargables.
+        mockMvc.perform(get("/api/v1/actas/" + acta.getId() + "/pdf"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF));
+
+        byte[] xml = mockMvc.perform(get("/api/v1/actas/" + acta.getId() + "/xml"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_XML))
+                .andReturn().getResponse().getContentAsByteArray();
+        // El XML lleva la firma XML-DSig enveloped.
+        assertThat(new String(xml)).contains("Signature");
+
+        // 6) Inmutabilidad: cualquier intento de borrado -> 403.
         mockMvc.perform(delete("/api/v1/actas/" + acta.getId()))
                 .andExpect(status().isForbidden());
 
-        // 6) Portal ya OFICIAL con badge verde y permalink.
+        // 7) Portal ya OFICIAL con badge verde y permalink.
         mockMvc.perform(get("/api/v1/portal/results/" + code))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.official").value(true))

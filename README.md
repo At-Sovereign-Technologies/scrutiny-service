@@ -558,3 +558,53 @@ src/main/java/com/registraduria/scrutiny_service
 * Migración V8 de Flyway — columna `created_at` en `candidate_votes`
 
 ---
+
+## SR-M5 — Aprobación del Escrutinio General y Acta E-26 Oficial
+
+Permite al **Magistrado del CNE** aprobar el escrutinio general para generar el
+**Acta de Declaratoria de Elección (E-26)** oficial e inmutable. Es aditivo:
+no modifica ningún contrato de SR-M4.
+
+### Flujo
+
+1. Se **cierra** el escrutinio general (handoff desde SR-M4): queda `CERRADO`
+   con un hash SHA-256 del estado agregado y el portal en `PRELIMINAR`.
+2. Cada **magistrado aprueba** (JWT + rol `MAGISTRADO_CNE`). Cada aprobación se
+   audita (magistrado, timestamp UTC, IP, hash del estado, firma RSA).
+3. Al alcanzar el **quórum** se autogenera el Acta E-26: método D'Hondt
+   (curules por lista + candidatos electos con votos y %), firmas de los
+   magistrados, hash SHA-256, **PDF/A-3** y **XML firmado (XML-DSig)**.
+4. El acta queda `OFICIAL_INMUTABLE` (almacenamiento Write-Once con triggers en
+   BD); cualquier `PUT/PATCH/DELETE` responde `403`. El hash se reverifica en
+   cada lectura.
+5. El portal pasa a `RESULTADOS OFICIALES` (badge verde WCAG AA) con enlace
+   permanente al acta y se publica el evento `official.results.published`.
+
+### Endpoints REST
+
+```http
+POST   /api/v1/general-scrutiny/close                 # cerrar (rol MAGISTRADO_CNE)
+POST   /api/v1/general-scrutiny/{scrutinyCode}/approve # aprobar (rol MAGISTRADO_CNE)
+GET    /api/v1/general-scrutiny/{scrutinyCode}         # estado del escrutinio
+GET    /api/v1/actas/{id}                              # leer acta (reverifica hash)
+GET    /api/v1/actas/{id}/verify                       # verificar integridad
+PUT|PATCH|DELETE /api/v1/actas/{id}                    # 403 FORBIDDEN (inmutable)
+GET    /api/v1/portal/results/{scrutinyCode}           # estado público del portal
+```
+
+Las operaciones de escritura requieren `Authorization: Bearer <JWT HS256>` con
+claim `role=MAGISTRADO_CNE`. Token inválido/ausente → `401`; rol incorrecto →
+`403`; ambos se registran en log con la IP de origen.
+
+### Topic Kafka
+
+```txt
+official.results.published
+```
+
+### Migración
+
+* Migración V9 de Flyway — tablas `general_scrutiny`, `magistrate_approvals`
+  (append-only), `acta_oficial` (Write-Once con triggers) y `portal_publication`.
+
+---

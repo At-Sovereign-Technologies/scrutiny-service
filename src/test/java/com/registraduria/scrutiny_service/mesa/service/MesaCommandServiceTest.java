@@ -7,6 +7,28 @@ package com.registraduria.scrutiny_service.mesa.service;
 //  Stack: JUnit 5 + Mockito + Java IO (Temp files)
 // ============================================================
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
+import static org.mockito.ArgumentMatchers.any;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
+
 import com.registraduria.scrutiny_service.command.repository.E14CommandRepository;
 import com.registraduria.scrutiny_service.domain.entity.E14Record;
 import com.registraduria.scrutiny_service.domain.enums.E14Status;
@@ -16,26 +38,6 @@ import com.registraduria.scrutiny_service.mesa.entity.MesaRecord;
 import com.registraduria.scrutiny_service.mesa.enums.MesaStatus;
 import com.registraduria.scrutiny_service.mesa.repository.MesaRepository;
 import com.registraduria.scrutiny_service.pdf.E14PdfService;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.io.TempDir;
-import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("MesaCommandService — Pruebas Unitarias")
@@ -156,7 +158,12 @@ class MesaCommandServiceTest {
         when(mesaRepository.findById(10L)).thenReturn(Optional.of(mesaAbierta));
         when(pdfService.generatePdf(any(MesaRecord.class))).thenReturn(mockPdf.toAbsolutePath().toString());
 
-        CloseMesaRequest request = new CloseMesaRequest(150, 20, 5, 2);
+        CloseMesaRequest request = new CloseMesaRequest(
+                            150,
+                            20,
+                            5,
+                            2,
+                            null);
 
         MesaRecord result = mesaCommandService.closeMesa(10L, request);
 
@@ -191,7 +198,13 @@ class MesaCommandServiceTest {
 
         when(mesaRepository.findById(10L)).thenReturn(Optional.of(mesaAbierta));
 
-        CloseMesaRequest request = new CloseMesaRequest(100, 10, 2, 1);
+        CloseMesaRequest request = new CloseMesaRequest(
+                            100,
+                            10,
+                            2,
+                            1,
+                            null
+                        );
 
         assertThatThrownBy(() -> mesaCommandService.closeMesa(10L, request))
                 .isInstanceOf(IllegalStateException.class)
@@ -210,7 +223,13 @@ class MesaCommandServiceTest {
     void tc_sc_004_closeMesa_inexistente_falla() {
         when(mesaRepository.findById(999L)).thenReturn(Optional.empty());
 
-        CloseMesaRequest request = new CloseMesaRequest(100, 10, 2, 1);
+        CloseMesaRequest request = new CloseMesaRequest(
+                            100,
+                            10,
+                            2,
+                            1,
+                            null
+                        );
 
         assertThatThrownBy(() -> mesaCommandService.closeMesa(999L, request))
             .isInstanceOf(IllegalArgumentException.class)
@@ -231,7 +250,13 @@ class MesaCommandServiceTest {
         // Devolvemos una ruta a un archivo que no existe
         when(pdfService.generatePdf(any(MesaRecord.class))).thenReturn("/invalid/path/nonexistent.pdf");
 
-        CloseMesaRequest request = new CloseMesaRequest(150, 20, 5, 2);
+        CloseMesaRequest request = new CloseMesaRequest(
+                            150,
+                            20,
+                            5,
+                            2,
+                            null
+                        );
 
         assertThatThrownBy(() -> mesaCommandService.closeMesa(10L, request))
             .isInstanceOf(RuntimeException.class)
@@ -421,7 +446,7 @@ class MesaCommandServiceTest {
     void tc_sc_021_sealMesa_irreversible() {
         when(mesaRepository.findById(13L)).thenReturn(Optional.of(mesaSellada));
 
-        assertThatThrownBy(() -> mesaCommandService.closeMesa(13L, new CloseMesaRequest(0, 0, 0, 0)))
+        assertThatThrownBy(() -> mesaCommandService.closeMesa(13L, new CloseMesaRequest(0, 0, 0, 0, null)))
                 .isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> mesaCommandService.verifyMesa(13L))
                 .isInstanceOf(IllegalStateException.class);

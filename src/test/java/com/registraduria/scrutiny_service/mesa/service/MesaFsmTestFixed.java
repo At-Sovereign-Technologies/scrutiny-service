@@ -1,17 +1,16 @@
 package com.registraduria.scrutiny_service.mesa.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
-
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import static org.mockito.ArgumentMatchers.any;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.registraduria.scrutiny_service.command.repository.E14CommandRepository;
@@ -90,7 +89,7 @@ class MesaFsmTestFixed {
             java.nio.file.Files.writeString(tmp, "dummy");
             when(pdfService.generatePdf(any())).thenReturn(tmp.toString());
 
-            CloseMesaRequest req = new CloseMesaRequest(1, 2, 3, 4);
+            CloseMesaRequest req = new CloseMesaRequest(1, 2, 3, 4, null);
             MesaRecord result = service.closeMesa(1L, req);
 
             assertThat(result.getStatus()).isEqualTo(MesaStatus.CLOSED);
@@ -103,7 +102,7 @@ class MesaFsmTestFixed {
     void closeMesa_fromClosed_throwsIllegalState() {
         when(mesaRepository.findById(2L)).thenReturn(Optional.of(mesaClosed));
 
-        CloseMesaRequest req = new CloseMesaRequest(1, 2, 3, 4);
+        CloseMesaRequest req = new CloseMesaRequest(1, 2, 3, 4, null);
 
         assertThatThrownBy(() -> service.closeMesa(2L, req))
                 .isInstanceOf(IllegalStateException.class)

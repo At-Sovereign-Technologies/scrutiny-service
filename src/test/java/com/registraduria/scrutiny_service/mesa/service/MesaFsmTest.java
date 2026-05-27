@@ -1,10 +1,24 @@
 package com.registraduria.scrutiny_service.mesa.service;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.argThat;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.registraduria.scrutiny_service.command.repository.E14CommandRepository;
 import com.registraduria.scrutiny_service.domain.entity.E14Record;
@@ -15,22 +29,6 @@ import com.registraduria.scrutiny_service.mesa.entity.MesaRecord;
 import com.registraduria.scrutiny_service.mesa.enums.MesaStatus;
 import com.registraduria.scrutiny_service.mesa.repository.MesaRepository;
 import com.registraduria.scrutiny_service.pdf.E14PdfService;
-
-import org.junit.jupiter.api.BeforeEach;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Files;
-
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Optional;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("MesaCommandService — Pruebas FSM (Finite State Machine)")
@@ -220,7 +218,9 @@ class MesaFsmTest {
     @Test
     @DisplayName("TC-SC-006 | closeMesa → Transición OPEN → CLOSED exitosa")
     void tc_sc_006_closeMesa_open_to_closed() {
-        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2);
+        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2, null);
+
+
         
         MesaRecord closed = MesaRecord.builder()
                 .id(1L)
@@ -246,7 +246,7 @@ class MesaFsmTest {
     @Test
     @DisplayName("TC-SC-007 | closeMesa → Rechaza CLOSED → CLOSED")
     void tc_sc_007_closeMesa_already_closed() {
-        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2);
+        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2, null);
 
         when(mesaRepository.findById(2L)).thenReturn(Optional.of(mesaClosed));
 
@@ -258,7 +258,7 @@ class MesaFsmTest {
     @Test
     @DisplayName("TC-SC-008 | closeMesa → Rechaza VERIFIED → CLOSED")
     void tc_sc_008_closeMesa_verified_to_closed() {
-        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2);
+        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2, null);
 
         when(mesaRepository.findById(3L)).thenReturn(Optional.of(mesaVerified));
 
@@ -270,7 +270,7 @@ class MesaFsmTest {
     @Test
     @DisplayName("TC-SC-009 | closeMesa → Rechaza SEALED → CLOSED")
     void tc_sc_009_closeMesa_sealed_to_closed() {
-        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2);
+        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2, null);
 
         when(mesaRepository.findById(4L)).thenReturn(Optional.of(mesaSealed));
 
@@ -282,7 +282,7 @@ class MesaFsmTest {
     @Test
     @DisplayName("TC-SC-010 | closeMesa → Mesa no encontrada lanza excepción")
     void tc_sc_010_closeMesa_not_found() {
-        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2);
+        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2, null);
 
         when(mesaRepository.findById(999L)).thenReturn(Optional.empty());
 
@@ -294,7 +294,7 @@ class MesaFsmTest {
     @Test
     @DisplayName("TC-SC-011 | closeMesa → Genera hash E14 SHA-256")
     void tc_sc_011_closeMesa_generates_hash() {
-        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2);
+        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2, null);
         
         MesaRecord closed = MesaRecord.builder()
                 .id(1L)
@@ -315,7 +315,7 @@ class MesaFsmTest {
     @Test
     @DisplayName("TC-SC-012 | closeMesa → Crea E14 en estado DRAFT")
     void tc_sc_012_closeMesa_e14_draft_status() {
-        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2);
+        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2, null);
         
         MesaRecord closed = MesaRecord.builder()
                 .id(1L)
@@ -341,7 +341,7 @@ class MesaFsmTest {
     @Test
     @DisplayName("TC-SC-013 | closeMesa → Registra todos los votos (valid, blank, null, unmarked)")
     void tc_sc_013_closeMesa_all_vote_counts() {
-        CloseMesaRequest request = new CloseMesaRequest(150, 10, 5, 3);
+        CloseMesaRequest request = new CloseMesaRequest(150, 10, 5, 3, null);
         
         MesaRecord closed = MesaRecord.builder()
                 .id(1L)
@@ -369,7 +369,7 @@ class MesaFsmTest {
     @Test
     @DisplayName("TC-SC-014 | closeMesa → Suma total de votos es correcta")
     void tc_sc_014_closeMesa_vote_sum() {
-        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2);
+        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2, null);
         int totalVotes = 100 + 5 + 3 + 2;
 
         MesaRecord closed = MesaRecord.builder()
@@ -397,7 +397,7 @@ class MesaFsmTest {
     @Test
     @DisplayName("TC-SC-015 | closeMesa → PDF generado para mesa cerrada")
     void tc_sc_015_closeMesa_pdf_generation() {
-        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2);
+        CloseMesaRequest request = new CloseMesaRequest(100, 5, 3, 2, null);
 
         when(mesaRepository.findById(1L)).thenReturn(Optional.of(mesaOpen));
         when(pdfService.generatePdf(any())).thenReturn(createTempPdfPath());
@@ -951,7 +951,7 @@ class MesaFsmTest {
     void tc_sc_047_no_backward_transitions() {
         when(mesaRepository.findById(2L)).thenReturn(Optional.of(mesaClosed));
         
-        assertThatThrownBy(() -> mesaCommandService.closeMesa(2L, new CloseMesaRequest(0, 0, 0, 0)))
+        assertThatThrownBy(() -> mesaCommandService.closeMesa(2L, new CloseMesaRequest(0, 0, 0, 0, null)))
                 .isInstanceOf(IllegalStateException.class);
     }
 
@@ -1022,7 +1022,7 @@ class MesaFsmTest {
         when(e14Repository.findByMesaCode("FLOW-001"))
                 .thenReturn(Optional.of(E14Record.builder().mesaCode("FLOW-001").build()));
 
-        CloseMesaRequest closeRequest = new CloseMesaRequest(100, 5, 3, 2);
+        CloseMesaRequest closeRequest = new CloseMesaRequest(100, 5, 3, 2, null);
         MesaRecord result1 = mesaCommandService.closeMesa(1L, closeRequest);
         assertThat(result1.getStatus()).isEqualTo(MesaStatus.CLOSED);
 

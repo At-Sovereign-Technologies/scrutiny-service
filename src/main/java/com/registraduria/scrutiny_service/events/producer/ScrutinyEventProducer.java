@@ -29,12 +29,14 @@ public class ScrutinyEventProducer {
     }
 
     public void publishResultsGenerated(
-            ScrutinyResultsGeneratedEvent event
-    ) {
+        ScrutinyResultsGeneratedEvent event
+) {
 
-        kafkaTemplate.send(
-                "scrutiny.results.generated",
-                event
-        );
-    }
+    kafkaTemplateProvider.ifAvailable(
+            kafkaTemplate -> kafkaTemplate.send(
+                    "scrutiny.results.generated",
+                    event
+            )
+    );
+}
 }

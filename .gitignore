@@ -31,3 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### CLAUDE ###
+CLAUDE.md
+.claude
+FRONTEND_INTEGRATION_GUIDE.md

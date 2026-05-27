@@ -5,6 +5,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import com.registraduria.scrutiny_service.events.ScrutinyApprovedEvent;
+import com.registraduria.scrutiny_service.events.ScrutinyResultsGeneratedEvent;
 
 import lombok.RequiredArgsConstructor;
 
@@ -24,6 +25,16 @@ public class ScrutinyEventProducer {
                         "scrutiny.approved",
                         event
                 )
+        );
+    }
+
+    public void publishResultsGenerated(
+            ScrutinyResultsGeneratedEvent event
+    ) {
+
+        kafkaTemplate.send(
+                "scrutiny.results.generated",
+                event
         );
     }
 }

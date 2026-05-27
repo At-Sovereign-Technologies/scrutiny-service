@@ -6,6 +6,7 @@ import java.security.MessageDigest;
 
 import org.springframework.stereotype.Service;
 
+import com.registraduria.scrutiny_service.candidate.service.CandidateVoteCommandService;
 import com.registraduria.scrutiny_service.command.repository.E14CommandRepository;
 import com.registraduria.scrutiny_service.domain.entity.E14Record;
 import com.registraduria.scrutiny_service.domain.enums.E14Status;
@@ -28,10 +29,15 @@ public class MesaCommandService {
 
     private final E14PdfService pdfService;
 
+    private final CandidateVoteCommandService candidateVoteCommandService;
+
     /**
      * Crear mesa: INICIAL → OPEN
      */
-    public MesaRecord createMesa(CreateMesaRequest request) {
+    public MesaRecord createMesa(
+            CreateMesaRequest request
+    ) {
+
         MesaRecord mesa = MesaRecord.builder()
                 .mesaCode(request.mesaCode())
                 .validVotes(0)
@@ -47,32 +53,57 @@ public class MesaCommandService {
 
     /**
      * Cerrar mesa: OPEN → CLOSED
-     * Validaciones:
-     *   - Mesa debe estar en estado OPEN
-     *   - Se registran los votos finales
-     *   - Se genera acta E14 en estado DRAFT
      */
-    public MesaRecord closeMesa(Long id, CloseMesaRequest request) {
-        MesaRecord mesa = mesaRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Mesa not found: " + id));
+    public MesaRecord closeMesa(
+            Long id,
+            CloseMesaRequest request
+    ) {
 
-        // FSM Validation: Solo OPEN → CLOSED
+        MesaRecord mesa = mesaRepository.findById(id)
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Mesa not found: " + id
+                        )
+                );
+
+        // FSM Validation
         if (mesa.getStatus() != MesaStatus.OPEN) {
+
             throw new IllegalStateException(
-                String.format("Invalid state transition: %s → CLOSED. Expected: OPEN", mesa.getStatus())
+                    String.format(
+                            "Invalid state transition: %s → CLOSED. Expected: OPEN",
+                            mesa.getStatus()
+                    )
             );
         }
 
-        mesa.setValidVotes(request.validVotes());
-        mesa.setBlankVotes(request.blankVotes());
-        mesa.setNullVotes(request.nullVotes());
-        mesa.setUnmarkedVotes(request.unmarkedVotes());
-        mesa.setStatus(MesaStatus.CLOSED);
+        mesa.setValidVotes(
+                request.validVotes()
+        );
+
+        mesa.setBlankVotes(
+                request.blankVotes()
+        );
+
+        mesa.setNullVotes(
+                request.nullVotes()
+        );
+
+        mesa.setUnmarkedVotes(
+                request.unmarkedVotes()
+        );
+
+        mesa.setStatus(
+                MesaStatus.CLOSED
+        );
 
         mesaRepository.save(mesa);
 
-        String pdfPath = pdfService.generatePdf(mesa);
-        String hash = generateFileHash(pdfPath);
+        String pdfPath =
+                pdfService.generatePdf(mesa);
+
+        String hash =
+                generateFileHash(pdfPath);
 
         E14Record e14 = E14Record.builder()
                 .mesaCode(mesa.getMesaCode())
@@ -83,99 +114,175 @@ public class MesaCommandService {
 
         e14Repository.save(e14);
 
+        // Persist candidate votes if provided
+        if (request.candidateVotes() != null
+                && !request.candidateVotes().isEmpty()) {
+
+            candidateVoteCommandService.saveCandidateVotes(
+                    mesa.getMesaCode(),
+                    request.candidateVotes()
+            );
+        }
+
         return mesa;
     }
 
     /**
      * Verificar mesa: CLOSED → VERIFIED
-     * Validaciones:
-     *   - Mesa debe estar en estado CLOSED
-     *   - Indica que VVPAT ha sido validado exitosamente
-     *   - Prepara para sellado de acta
      */
-    public MesaRecord verifyMesa(Long id) {
-        MesaRecord mesa = mesaRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Mesa not found: " + id));
+    public MesaRecord verifyMesa(
+            Long id
+    ) {
 
-        // FSM Validation: Solo CLOSED → VERIFIED
+        MesaRecord mesa = mesaRepository.findById(id)
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Mesa not found: " + id
+                        )
+                );
+
+        // FSM Validation
         if (mesa.getStatus() != MesaStatus.CLOSED) {
+
             throw new IllegalStateException(
-                String.format("Invalid state transition: %s → VERIFIED. Expected: CLOSED", mesa.getStatus())
+                    String.format(
+                            "Invalid state transition: %s → VERIFIED. Expected: CLOSED",
+                            mesa.getStatus()
+                    )
             );
         }
 
-        mesa.setStatus(MesaStatus.VERIFIED);
+        mesa.setStatus(
+                MesaStatus.VERIFIED
+        );
+
         return mesaRepository.save(mesa);
     }
 
     /**
      * Sellar mesa: VERIFIED → SEALED
-     * Validaciones:
-     *   - Mesa debe estar en estado VERIFIED
-     *   - Transición final e inmutable
-     *   - E14 cambia a estado SEALED
      */
-    public MesaRecord sealMesa(Long id) {
-        MesaRecord mesa = mesaRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Mesa not found: " + id));
+    public MesaRecord sealMesa(
+            Long id
+    ) {
 
-        // FSM Validation: Solo VERIFIED → SEALED
+        MesaRecord mesa = mesaRepository.findById(id)
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Mesa not found: " + id
+                        )
+                );
+
+        // FSM Validation
         if (mesa.getStatus() != MesaStatus.VERIFIED) {
+
             throw new IllegalStateException(
-                String.format("Invalid state transition: %s → SEALED. Expected: VERIFIED", mesa.getStatus())
+                    String.format(
+                            "Invalid state transition: %s → SEALED. Expected: VERIFIED",
+                            mesa.getStatus()
+                    )
             );
         }
 
-        mesa.setStatus(MesaStatus.SEALED);
+        mesa.setStatus(
+                MesaStatus.SEALED
+        );
+
         mesaRepository.save(mesa);
 
-        // Actualizar E14 a SEALED
-        E14Record e14 = e14Repository.findByMesaCode(mesa.getMesaCode())
-                .orElseThrow(() -> new IllegalArgumentException("E14 not found for mesa: " + mesa.getMesaCode()));
-        e14.setStatus(E14Status.SEALED);
+        // Update E14 status
+        E14Record e14 = e14Repository
+                .findByMesaCode(
+                        mesa.getMesaCode()
+                )
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "E14 not found for mesa: "
+                                        + mesa.getMesaCode()
+                        )
+                );
+
+        e14.setStatus(
+                E14Status.SEALED
+        );
+
         e14Repository.save(e14);
 
         return mesa;
     }
 
     /**
-     * Poner en cuarentena: * → QUARANTINED
-     * Validaciones:
-     *   - Puede desde cualquier estado excepto SEALED (irrevocable)
-     *   - Registra irregularidad (usa flag quarantined)
-     *   - Previene transiciones posteriores
+     * Poner mesa en cuarentena
      */
-    public MesaRecord quarantineMesa(Long id, String reason) {
-        MesaRecord mesa = mesaRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Mesa not found: " + id));
+    public MesaRecord quarantineMesa(
+            Long id,
+            String reason
+    ) {
 
-        // FSM Validation: No se puede cuarentinar desde SEALED
+        MesaRecord mesa = mesaRepository.findById(id)
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "Mesa not found: " + id
+                        )
+                );
+
+        // No quarantine after SEALED
         if (mesa.getStatus() == MesaStatus.SEALED) {
+
             throw new IllegalStateException(
-                String.format("Cannot quarantine SEALED mesa. Current state: %s", mesa.getStatus())
+                    String.format(
+                            "Cannot quarantine SEALED mesa. Current state: %s",
+                            mesa.getStatus()
+                    )
             );
         }
 
-        mesa.setStatus(MesaStatus.QUARANTINED);
+        mesa.setStatus(
+                MesaStatus.QUARANTINED
+        );
+
         mesa.setQuarantined(true);
+
         return mesaRepository.save(mesa);
     }
 
-    private String generateFileHash(String path) {
-        try {
-            byte[] fileBytes = Files.readAllBytes(Path.of(path));
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(fileBytes);
+    private String generateFileHash(
+            String path
+    ) {
 
-            StringBuilder hex = new StringBuilder();
+        try {
+
+            byte[] fileBytes =
+                    Files.readAllBytes(
+                            Path.of(path)
+                    );
+
+            MessageDigest digest =
+                    MessageDigest.getInstance(
+                            "SHA-256"
+                    );
+
+            byte[] hash =
+                    digest.digest(fileBytes);
+
+            StringBuilder hex =
+                    new StringBuilder();
+
             for (byte b : hash) {
-                hex.append(String.format("%02x", b));
+
+                hex.append(
+                        String.format("%02x", b)
+                );
             }
 
             return hex.toString();
 
         } catch (Exception e) {
-            throw new RuntimeException("Error generating file hash.", e);
+
+            throw new RuntimeException(
+                    "Error generating file hash.",
+                    e
+            );
         }
     }
 }

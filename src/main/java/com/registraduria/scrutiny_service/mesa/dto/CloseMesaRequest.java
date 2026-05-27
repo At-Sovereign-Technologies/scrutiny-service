@@ -1,5 +1,9 @@
 package com.registraduria.scrutiny_service.mesa.dto;
 
+import java.util.List;
+
+import com.registraduria.scrutiny_service.candidate.dto.CandidateVoteInput;
+
 public record CloseMesaRequest(
 
         Integer validVotes,
@@ -8,6 +12,8 @@ public record CloseMesaRequest(
 
         Integer nullVotes,
 
-        Integer unmarkedVotes
+        Integer unmarkedVotes,
+
+        List<CandidateVoteInput> candidateVotes
 ) {
 }

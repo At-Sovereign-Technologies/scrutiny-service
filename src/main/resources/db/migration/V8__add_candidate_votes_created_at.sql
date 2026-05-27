@@ -1,0 +1,2 @@
+ALTER TABLE candidate_votes
+    ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT NOW();

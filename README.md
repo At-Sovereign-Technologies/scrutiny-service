@@ -12,6 +12,9 @@ El servicio implementa:
 * Validación de doble verdad VVPAT
 * Cuarentena automática de mesas
 * Aprobación de escrutinio ascendente
+* **Agregación de votos por candidato por mesa**
+* **Consultas de totales globales y por mesa**
+* **Publicación de resultados electorales agregados via Kafka al aprobar el escrutinio nacional**
 * Comunicación distribuida mediante Kafka
 * Comunicación gRPC con dispute-service
 * Persistencia en PostgreSQL
@@ -60,6 +63,7 @@ Cuando una mesa es cerrada:
 3. Se genera un hash SHA-256 del PDF
 4. Se almacena un registro E14 en PostgreSQL
 5. El E14 queda en estado DRAFT
+6. Si se incluye desglose por candidato, se persiste en `candidate_votes`
 
 Los PDFs generados se almacenan en:
 
@@ -133,11 +137,8 @@ scrutiny.approved
 
 Cuando se aprueba el nivel NACIONAL:
 
-```txt
-E26 ENABLED
-```
-
-es emitido dentro del flujo.
+* Se publica el evento `scrutiny.results.generated` con los totales agregados de votos por candidato de todas las mesas
+* Este evento habilita la generación del E26 por parte del futuro `results-service`
 
 ---
 
@@ -199,6 +200,40 @@ Payload de ejemplo:
 
 ---
 
+### Resultados electorales generados
+
+Topic:
+
+```txt
+scrutiny.results.generated
+```
+
+Publicado cuando el escrutinio ascendente alcanza la aprobación a nivel **NACIONAL**. Contiene los totales ya agregados de todas las mesas del país. Este evento es el punto de entrada para el futuro `results-service` y la generación del E26.
+
+Payload de ejemplo:
+
+```json
+{
+  "scrutinyLevel": "NATIONAL",
+  "candidateResults": [
+    {
+      "candidateId": "C1",
+      "candidateName": "Juan Perez",
+      "party": "Partido Azul",
+      "totalVotes": 1540
+    },
+    {
+      "candidateId": "C2",
+      "candidateName": "Maria Lopez",
+      "party": "Partido Verde",
+      "totalVotes": 1210
+    }
+  ]
+}
+```
+
+---
+
 # Endpoints REST
 
 ## Mesas
@@ -225,7 +260,7 @@ Request:
 PATCH /api/v1/mesas/{id}/close
 ```
 
-Request:
+Request básico (sin desglose por candidato):
 
 ```json
 {
@@ -235,6 +270,33 @@ Request:
   "unmarkedVotes": 1
 }
 ```
+
+Request extendido (con desglose por candidato):
+
+```json
+{
+  "validVotes": 400,
+  "blankVotes": 10,
+  "nullVotes": 2,
+  "unmarkedVotes": 1,
+  "candidateVotes": [
+    {
+      "candidateId": "C1",
+      "candidateName": "Juan Perez",
+      "party": "Partido Azul",
+      "votes": 220
+    },
+    {
+      "candidateId": "C2",
+      "candidateName": "Maria Lopez",
+      "party": "Partido Verde",
+      "votes": 180
+    }
+  ]
+}
+```
+
+El campo `candidateVotes` es opcional. Si se omite, el flujo existente funciona sin cambios.
 
 ---
 
@@ -255,6 +317,73 @@ Request:
   "physicalVotes": 390
 }
 ```
+
+---
+
+## Votos por Candidato
+
+### Votos registrados por mesa
+
+```http
+GET /api/v1/candidate-votes/by-mesa/{mesaCode}
+```
+
+Retorna los registros individuales de votos por candidato para una mesa específica.
+
+Respuesta de ejemplo:
+
+```json
+[
+  {
+    "id": 1,
+    "mesaCode": "MESA-001",
+    "candidateId": "C1",
+    "candidateName": "Juan Perez",
+    "party": "Partido Azul",
+    "votes": 220,
+    "createdAt": "2026-05-26T10:30:00"
+  }
+]
+```
+
+---
+
+### Totales globales por candidato
+
+```http
+GET /api/v1/candidate-votes/aggregate
+```
+
+Retorna la sumatoria de votos por candidato en todas las mesas, ordenada de mayor a menor.
+
+Respuesta de ejemplo:
+
+```json
+[
+  {
+    "candidateId": "C1",
+    "candidateName": "Juan Perez",
+    "party": "Partido Azul",
+    "totalVotes": 1540
+  },
+  {
+    "candidateId": "C2",
+    "candidateName": "Maria Lopez",
+    "party": "Partido Verde",
+    "totalVotes": 1210
+  }
+]
+```
+
+---
+
+### Totales por candidato en una mesa
+
+```http
+GET /api/v1/candidate-votes/aggregate/by-mesa/{mesaCode}
+```
+
+Retorna la sumatoria de votos por candidato filtrada para una mesa específica.
 
 ---
 
@@ -365,6 +494,7 @@ Kafka se utiliza para:
 
 * Propagación de discrepancias VVPAT
 * Propagación de aprobaciones de escrutinio
+* **Publicación de resultados electorales agregados por candidato al aprobar escrutinio nacional**
 * Auditoría distribuida
 
 ---
@@ -374,6 +504,12 @@ Kafka se utiliza para:
 ```txt
 src/main/java/com/registraduria/scrutiny_service
 │
+├── candidate
+│   ├── controller
+│   ├── dto
+│   ├── entity
+│   ├── repository
+│   └── service
 ├── command
 ├── query
 ├── mesa
@@ -408,5 +544,17 @@ src/main/java/com/registraduria/scrutiny_service
 * Flujo de aprobación nacional
 * Eventos Kafka de aprobación
 * Activación de E26
+
+## HU5 — Agregación de Votos por Candidato
+
+* Entidad `CandidateVoteRecord` en tabla `candidate_votes` con timestamp `created_at`
+* Campo opcional `candidateVotes` en cierre de mesa (compatibilidad con flujo existente)
+* Persistencia de votos por candidato por mesa al cerrar la mesa
+* Consulta de registros por mesa: `GET /api/v1/candidate-votes/by-mesa/{mesaCode}`
+* Agregación global de votos por candidato: `GET /api/v1/candidate-votes/aggregate`
+* Agregación por candidato filtrada por mesa: `GET /api/v1/candidate-votes/aggregate/by-mesa/{mesaCode}`
+* Evento Kafka `scrutiny.results.generated` publicado al aprobar el escrutinio a nivel NACIONAL, con totales agregados de todas las mesas y campo `scrutinyLevel`
+* Migración V7 de Flyway — tabla `candidate_votes` con índices sobre `mesa_code` y `candidate_id`
+* Migración V8 de Flyway — columna `created_at` en `candidate_votes`
 
 ---
